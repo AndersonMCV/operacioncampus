@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../providers/app_state_provider.dart';
+import '../providers/location_provider.dart';
+import '../services/asset_loader_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/uv_data_panel.dart';
 
@@ -14,6 +16,12 @@ class ARInterventionScreen extends StatefulWidget {
 
 class _ARInterventionScreenState extends State<ARInterventionScreen>
     with TickerProviderStateMixin {
+  
+  // Lazy Loading State
+  bool _assetsLoaded = false;
+  double _downloadProgress = 0.0;
+  
+  // AR State
   bool _isARInitialized = false;
   bool _objectAnchored = false;
   bool _interventionCompleted = false;
@@ -27,21 +35,62 @@ class _ARInterventionScreenState extends State<ARInterventionScreen>
       duration: const Duration(seconds: 2),
     )..repeat();
     
-    _initializeAR();
+    _loadAssetsAndInitAR();
+  }
+  
+  Future<void> _loadAssetsAndInitAR() async {
+    final assetService = AssetLoaderService();
+    final locationProvider = context.read<LocationProvider>();
+    
+    // 1. Check if assets are loaded (Lazy Loading Strategy)
+    if (!assetService.areAssetsLoaded) {
+      // Subscribe to progress
+      final subscription = assetService.progressStream.listen((progress) {
+        if (mounted) {
+          setState(() {
+            _downloadProgress = progress;
+          });
+        }
+      });
+      
+      // Force load since we are effectively at the site (< 5m logic from home)
+      // Pass current pos and target
+      if (locationProvider.currentPosition != null) {
+        await assetService.checkAndLoadAssets(
+          locationProvider.currentPosition!,
+          locationProvider.target,
+        );
+      }
+      
+      subscription.cancel();
+    }
+    
+    if (mounted) {
+      setState(() {
+        _assetsLoaded = true;
+      });
+      
+      // 2. Initialize AR only after assets are in memory
+      await _initializeAR();
+    }
   }
   
   Future<void> _initializeAR() async {
     // Simulate AR initialization
     await Future.delayed(const Duration(seconds: 2));
-    setState(() {
-      _isARInitialized = true;
-    });
+    if (mounted) {
+      setState(() {
+        _isARInitialized = true;
+      });
+    }
     
     // Simulate plane detection and object anchoring
     await Future.delayed(const Duration(seconds: 2));
-    setState(() {
-      _objectAnchored = true;
-    });
+    if (mounted) {
+      setState(() {
+        _objectAnchored = true;
+      });
+    }
   }
   
   void _onObjectTapped() {
@@ -114,7 +163,7 @@ class _ARInterventionScreenState extends State<ARInterventionScreen>
       ),
       body: Stack(
         children: [
-          // AR View simulation (placeholder - real implementation would use arcore_flutter_plugin)
+          // AR View simulation
           Container(
             decoration: BoxDecoration(
               gradient: RadialGradient(
@@ -132,8 +181,8 @@ class _ARInterventionScreenState extends State<ARInterventionScreen>
             ),
           ),
           
-          // Instructions overlay
-          if (!_interventionCompleted)
+          // Instructions overlay (only if assets loaded)
+          if (_assetsLoaded && !_interventionCompleted)
             Positioned(
               top: 20,
               left: 20,
@@ -182,6 +231,36 @@ class _ARInterventionScreenState extends State<ARInterventionScreen>
   }
   
   Widget _buildARContent() {
+    // 1. Asset Loading State
+    if (!_assetsLoaded) {
+      return Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(Icons.cloud_download, size: 48, color: AppTheme.primaryGreen),
+          const SizedBox(height: 20),
+          Text(
+            'Descargando modelos 3D (${(_downloadProgress * 100).toInt()}%)...',
+            style: const TextStyle(color: AppTheme.textPrimary, fontSize: 16),
+          ),
+          const SizedBox(height: 10),
+          SizedBox(
+            width: 200,
+            child: LinearProgressIndicator(
+              value: _downloadProgress,
+              color: AppTheme.primaryGreen,
+              backgroundColor: AppTheme.surfaceDark,
+            ),
+          ),
+          const SizedBox(height: 10),
+          const Text(
+            'Optimizando uso de datos...',
+            style: TextStyle(color: AppTheme.textSecondary, fontSize: 12),
+          ),
+        ],
+      );
+    }
+  
+    // 2. AR Initialization State
     if (!_isARInitialized) {
       return Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -204,6 +283,7 @@ class _ARInterventionScreenState extends State<ARInterventionScreen>
       );
     }
     
+    // 3. Plane Detection State
     if (!_objectAnchored) {
       return Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -253,7 +333,7 @@ class _ARInterventionScreenState extends State<ARInterventionScreen>
       );
     }
     
-    // 3D Object simulation (interactive)
+    // 4. Interactive Object State
     return GestureDetector(
       onTap: _interventionCompleted ? null : _onObjectTapped,
       child: AnimatedBuilder(
@@ -273,7 +353,7 @@ class _ARInterventionScreenState extends State<ARInterventionScreen>
                       ? [
                           AppTheme.primaryGreen,
                           AppTheme.primaryGreen.withOpacity(0.6),
-                        ]
+                          ]
                       : [
                           AppTheme.secondaryBlue,
                           AppTheme.secondaryBlue.withOpacity(0.6),

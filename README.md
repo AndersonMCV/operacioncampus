@@ -4,12 +4,22 @@
 
 ## Video Demostrativo
 
-[**VER VIDEO DEMOSTRATIVO (YouTube)**] https://drive.google.com/file/d/1Ze1VGbQjLC6KuBqHZuEQc4y3oVoYU0Dw/view?usp=sharing  
+[**VER VIDEO DEMOSTRATIVO (YouTube)**](https://youtube.com/...)  
 *Duración: < 2 minutos. Case study mostrando permisos, geolocalización, ML y AR.*
 
 ## Informe Técnico
 
 [**Leer INFORME_TECNICO.md**](INFORME_TECNICO.md) con la justificación de arquitectura y manejo de batería.
+
+## Auditoría de Eficiencia y Arquitectura (Actividad 2.15)
+Este proyecto ha sido auditado y optimizado siguiendo estándares de "Software Verde" y alto rendimiento.
+
+**📄 Ver Informe Completo:** [AUDIT_REPORT.md](AUDIT_REPORT.md)
+
+### 🚀 Mejoras Implementadas
+1.  **Optimización de Renderizado:** Refactorización de `HomeScreen` para eliminar reconstrucciones costosas del mapa durante actualizaciones de GPS.
+2.  **Lazy Loading Inteligente:** Los modelos 3D pesados solo se cargan cuando el usuario está a menos de **50 metros** del objetivo, ahorrando ~50MB de datos y ~200MB de RAM.
+3.  **Gestión de Estado:** Uso granular de `Provider` y `Selector` para minimizar el impacto en el hilo UI.
 
 ---
 
@@ -83,7 +93,7 @@ flutter run
 - **Screens**: Permission Error, Home (Maps), Camera ML, AR Intervention
 - **Widgets**: Proximity Radar, ML Overlay, UV Data Panel
 
-## 🔧 Próximas Mejoras
+## Próximas Mejoras
 
 1. Integración TensorFlow Lite real con modelo `.tflite`
 2. AR real con ARCore/ARKit

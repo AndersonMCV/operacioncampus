@@ -28,13 +28,23 @@ class _HomeScreenState extends State<HomeScreen> {
   
   @override
   Widget build(BuildContext context) {
+    // OPTIMIZATION: Removed top-level Consumer<LocationProvider>
+    // This prevents the entire Scaffold (and especially the GoogleMap) from 
+    // rebuilding on every single location update (GPS tick).
+    // Instead, we use specific Consumers/Selectors only for widgets that actually need to change.
+    
+    // Access target data once since it doesn't change frequently
+    final target = context.read<LocationProvider>().target;
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('OPERACIÓN CAMPUS'),
         actions: [
           // GPS request counter (energy efficiency indicator)
-          Consumer<LocationProvider>(
-            builder: (context, locationProvider, _) {
+          // OPTIMIZATION: Only this widget rebuilds when gpsRequestCount changes
+          Selector<LocationProvider, int>(
+            selector: (_, provider) => provider.gpsRequestCount,
+            builder: (context, count, _) {
               return Padding(
                 padding: const EdgeInsets.only(right: 16.0),
                 child: Center(
@@ -60,7 +70,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                         const SizedBox(width: 4),
                         Text(
-                          '${locationProvider.gpsRequestCount}',
+                          '$count',
                           style: const TextStyle(
                             color: AppTheme.primaryGreen,
                             fontWeight: FontWeight.bold,
@@ -76,191 +86,198 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ],
       ),
-      body: Consumer<LocationProvider>(
-        builder: (context, locationProvider, _) {
-          final currentPos = locationProvider.currentPosition;
-          final target = locationProvider.target;
-          final distance = locationProvider.distanceToTarget;
-          final isAccurate = locationProvider.isAccuracyGoodEnough;
-          
-          return Stack(
-            children: [
-              // Google Maps
-              GoogleMap(
-                initialCameraPosition: CameraPosition(
-                  target: LatLng(target.latitude, target.longitude),
-                  zoom: 16,
+      body: Stack(
+        children: [
+          // Google Maps
+          // OPTIMIZATION: This widget is now stable and won't rebuild on every GPS update
+          // unless markers/circles explicitly need to change (handled internally by GoogleMap if we passed a Stream/Set)
+          // But here we want to avoid recreating the GoogleMap widget itself.
+          GoogleMap(
+            initialCameraPosition: CameraPosition(
+              target: LatLng(target.latitude, target.longitude),
+              zoom: 16,
+            ),
+            onMapCreated: (controller) {
+              _mapController = controller;
+              // Set dark map style
+              controller.setMapStyle(_darkMapStyle);
+            },
+            myLocationEnabled: true,
+            myLocationButtonEnabled: true,
+            markers: {
+              // Target marker
+              Marker(
+                markerId: const MarkerId('target'),
+                position: LatLng(target.latitude, target.longitude),
+                icon: BitmapDescriptor.defaultMarkerWithHue(
+                  BitmapDescriptor.hueGreen,
                 ),
-                onMapCreated: (controller) {
-                  _mapController = controller;
-                  // Set dark map style
-                  controller.setMapStyle(_darkMapStyle);
-                },
-                myLocationEnabled: true,
-                myLocationButtonEnabled: true,
-                markers: {
-                  // Target marker
-                  Marker(
-                    markerId: const MarkerId('target'),
-                    position: LatLng(target.latitude, target.longitude),
-                    icon: BitmapDescriptor.defaultMarkerWithHue(
-                      BitmapDescriptor.hueGreen,
-                    ),
-                    infoWindow: InfoWindow(
-                      title: target.name,
-                      snippet: target.description,
-                    ),
-                  ),
-                },
-                circles: {
-                  // Accuracy circle around target
-                  Circle(
-                    circleId: const CircleId('target_area'),
-                    center: LatLng(target.latitude, target.longitude),
-                    radius: 5, // 5 meters activation radius
-                    fillColor: AppTheme.primaryGreen.withOpacity(0.2),
-                    strokeColor: AppTheme.primaryGreen,
-                    strokeWidth: 2,
-                  ),
-                },
+                infoWindow: InfoWindow(
+                  title: target.name,
+                  snippet: target.description,
+                ),
               ),
-              
-              // Bottom sheet with proximity radar and controls
-              Positioned(
-                left: 0,
-                right: 0,
-                bottom: 0,
-                child: Container(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        AppTheme.backgroundDark.withOpacity(0.0),
-                        AppTheme.backgroundDark,
-                      ],
-                    ),
+            },
+            circles: {
+              // Accuracy circle around target
+              Circle(
+                circleId: const CircleId('target_area'),
+                center: LatLng(target.latitude, target.longitude),
+                radius: 5, // 5 meters activation radius
+                fillColor: AppTheme.primaryGreen.withOpacity(0.2),
+                strokeColor: AppTheme.primaryGreen,
+                strokeWidth: 2,
+              ),
+            },
+          ),
+          
+          // Bottom sheet with proximity radar and controls
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    AppTheme.backgroundDark.withOpacity(0.0),
+                    AppTheme.backgroundDark,
+                  ],
+                ),
+              ),
+              child: Container(
+                margin: const EdgeInsets.all(16),
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: AppTheme.surfaceDark.withOpacity(0.95),
+                  borderRadius: BorderRadius.circular(24),
+                  border: Border.all(
+                    color: AppTheme.primaryGreen.withOpacity(0.3),
+                    width: 2,
                   ),
-                  child: Container(
-                    margin: const EdgeInsets.all(16),
-                    padding: const EdgeInsets.all(24),
-                    decoration: BoxDecoration(
-                      color: AppTheme.surfaceDark.withOpacity(0.95),
-                      borderRadius: BorderRadius.circular(24),
-                      border: Border.all(
-                        color: AppTheme.primaryGreen.withOpacity(0.3),
-                        width: 2,
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.3),
-                          blurRadius: 20,
-                          spreadRadius: 5,
-                        ),
-                      ],
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.3),
+                      blurRadius: 20,
+                      spreadRadius: 5,
                     ),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        ProximityRadar(
-                          distanceToTarget: distance,
-                          isAccuracyGood: isAccurate,
-                        ),
+                  ],
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // OPTIMIZATION: Only the radar and distance/accuracy texts rebuild now
+                    Consumer<LocationProvider>(
+                      builder: (context, locationProvider, _) {
+                        final distance = locationProvider.distanceToTarget;
+                        final isAccurate = locationProvider.isAccuracyGoodEnough;
+                        final currentPos = locationProvider.currentPosition;
                         
-                        const SizedBox(height: 24),
-                        
-                        // Mission info
-                        Container(
-                          padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                            color: AppTheme.backgroundDark,
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Column(
-                            children: [
-                              Row(
+                        return Column(
+                          children: [
+                            ProximityRadar(
+                              distanceToTarget: distance,
+                              isAccuracyGood: isAccurate,
+                            ),
+
+                            const SizedBox(height: 24),
+                            
+                            // Mission info (static)
+                            Container(
+                              padding: const EdgeInsets.all(16),
+                              decoration: BoxDecoration(
+                                color: AppTheme.backgroundDark,
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Column(
                                 children: [
-                                  const Icon(
-                                    Icons.warning_amber_rounded,
-                                    color: AppTheme.warningYellow,
-                                    size: 20,
+                                  Row(
+                                    children: [
+                                      const Icon(
+                                        Icons.warning_amber_rounded,
+                                        color: AppTheme.warningYellow,
+                                        size: 20,
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: Text(
+                                          'OBJETIVO: ${target.name}',
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .bodyLarge
+                                              ?.copyWith(
+                                                fontWeight: FontWeight.bold,
+                                                color: AppTheme.warningYellow,
+                                              ),
+                                        ),
+                                      ),
+                                    ],
                                   ),
-                                  const SizedBox(width: 8),
-                                  Expanded(
-                                    child: Text(
-                                      'OBJETIVO: ${target.name}',
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .bodyLarge
-                                          ?.copyWith(
-                                            fontWeight: FontWeight.bold,
-                                            color: AppTheme.warningYellow,
-                                          ),
-                                    ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    target.description,
+                                    style: Theme.of(context).textTheme.bodyMedium,
                                   ),
                                 ],
                               ),
+                            ),
+                            
+                            const SizedBox(height: 16),
+                            
+                            // Activate camera button
+                            SizedBox(
+                              width: double.infinity,
+                              child: ElevatedButton.icon(
+                                onPressed: isAccurate
+                                    ? () {
+                                        Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder: (context) =>
+                                                const CameraMLScreen(),
+                                          ),
+                                        );
+                                      }
+                                    : null,
+                                icon: const Icon(Icons.camera_alt),
+                                label: Text(
+                                  isAccurate
+                                      ? 'ACTIVAR CÁMARA'
+                                      : 'Acércate más (GPS < 5m)',
+                                ),
+                                style: ElevatedButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(vertical: 16),
+                                  backgroundColor: isAccurate
+                                      ? AppTheme.primaryGreen
+                                      : AppTheme.textSecondary.withOpacity(0.3),
+                                ),
+                              ),
+                            ),
+                            
+                            if (!isAccurate && distance != null && distance < 10) ...[
                               const SizedBox(height: 8),
                               Text(
-                                target.description,
-                                style: Theme.of(context).textTheme.bodyMedium,
+                                'Precisión actual: ${currentPos?.accuracy.toStringAsFixed(1) ?? "N/A"}m',
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .bodySmall
+                                    ?.copyWith(
+                                      color: AppTheme.textSecondary,
+                                    ),
                               ),
                             ],
-                          ),
-                        ),
-                        
-                        const SizedBox(height: 16),
-                        
-                        // Activate camera button
-                        SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton.icon(
-                            onPressed: isAccurate
-                                ? () {
-                                    Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder: (context) =>
-                                            const CameraMLScreen(),
-                                      ),
-                                    );
-                                  }
-                                : null,
-                            icon: const Icon(Icons.camera_alt),
-                            label: Text(
-                              isAccurate
-                                  ? 'ACTIVAR CÁMARA'
-                                  : 'Acércate más (GPS < 5m)',
-                            ),
-                            style: ElevatedButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(vertical: 16),
-                              backgroundColor: isAccurate
-                                  ? AppTheme.primaryGreen
-                                  : AppTheme.textSecondary.withOpacity(0.3),
-                            ),
-                          ),
-                        ),
-                        
-                        if (!isAccurate && distance != null && distance < 10) ...[
-                          const SizedBox(height: 8),
-                          Text(
-                            'Precisión actual: ${currentPos?.accuracy.toStringAsFixed(1) ?? "N/A"}m',
-                            style: Theme.of(context)
-                                .textTheme
-                                .bodySmall
-                                ?.copyWith(
-                                  color: AppTheme.textSecondary,
-                                ),
-                          ),
-                        ],
-                      ],
+                          ],
+                        );
+                      }
                     ),
-                  ),
+                  ],
                 ),
               ),
-            ],
-          );
-        },
+            ),
+          ),
+        ],
       ),
     );
   }
