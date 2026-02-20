@@ -1,7 +1,7 @@
 # Auditoría Técnica y Ética: Operación Campus
 
 **Fecha:** 19 de Febrero, 2026
-**Autor:** AndersonCV - Auditor Técnico
+**Autor:** AndersonMCV - alddrinW- Auditor Técnico
 
 ---
 
